@@ -1,0 +1,26 @@
+services:
+  brain:
+    build: ./brain
+    container_name: minecraft_ai_brain
+    ports:
+      - "8000:8000"
+    environment:
+      - HF_HOME=/app/hf_cache
+    volumes:
+      - ./brain/chroma_data:/app/chroma_data
+      - ./brain/hf_cache:/app/hf_cache
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      
+  bot:
+    build: ./bot
+    container_name: minecraft_ai_bot
+    depends_on:
+      - brain
+    env_file:
+      - .env
+    extra_hosts:
+      # Разрешает доступ к локальному серверу Minecraft (HLDS/Vanilla)
+      - "host.docker.internal:host-gateway"
