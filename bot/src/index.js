@@ -11,7 +11,8 @@ const { huntAnimal } = require('./behaviors/hunt.js');
 const chatHistory = [];
 const MAX_HISTORY = 6; // Храним последние 6 реплик (3 от игрока, 3 от бота)
 const path = require('path');
-// Поднимаемся на два уровня вверх: из bot/src в корень проекта
+
+// Dotenv
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 
 // Константы-плагины ------------------------------
@@ -39,12 +40,12 @@ bot.on('spawn', () => {
     console.log('✅ Бот успешно появился в мире!');
 });
 
-// --- РЕАКТИВНЫЙ УРОВЕНЬ: Умная самозащита с переключением оружия ---
+// Автоматическая защита от враждебных мобов
 bot.on('physicsTick', async () => {
     if (!bot.pvp || bot.pvp.target) return;
     if (bot.currentIntent === 'follow') return;
     
-    // ПРЕДОХРАНИТЕЛЬ: Не ищем новых врагов, пока бот копается в инвентаре
+    // ПРЕДОХРАНИТЕЛЬ: Отмена поиска при нахождении бота в инвентаре
     if (bot.isEquipping) return; 
 
     const enemy = bot.nearestEntity(entity => {
@@ -64,17 +65,17 @@ bot.on('physicsTick', async () => {
         return distToBot < radius;
     });
 
-    if (enemy && !bot.isEating) { // Не начинаем драться, пока жуем яблоко!
+    if (enemy && !bot.isEating) { // Приоритет о восполнение голода/здоровья
     
-        // Если бот в этот момент копал землю - отменяем!
+        // Отмена действия и цели
         if (bot.collectBlock?.targets?.length > 0) {
             bot.collectBlock.cancelTask();
             console.log('[Защита] Добыча прервана ради боя!');
         }
 
         if (!bot.pvp.target) {
-            // Экипируем меч
-            const bestWeapon = bot.inventory.items().find(item => item.name.includes('sword') || item.name.includes('axe'));
+            // Экипировка подходящего оружия
+            const bestWeapon = bot.inventory.items().find(item => item.name.includes('sword') || item.name.includes('_axe'));
             if (bestWeapon) {
                 bot.equip(bestWeapon, 'hand').catch(console.error);
                 console.log(`[Защита] Достаю оружие: ${bestWeapon.name}`);
@@ -86,10 +87,9 @@ bot.on('physicsTick', async () => {
     
 });
 
+// Остановка защиты
 bot.on('stoppedAttacking', async () => {
     console.log('[Защита] Враг повержен или потерян.');
-
-    // -------------------------------------------
     
     if (bot.currentIntent === 'defend' && bot.targetPlayer) {
         bot.chat("Угроза устранена! Возвращаюсь к охране.");
@@ -100,30 +100,30 @@ bot.on('stoppedAttacking', async () => {
     }
 });
 
-// ----------------------------------------------------
-
-// --- РЕАКТИВНЫЙ УРОВЕНЬ: Нативная система питания ---
-let lastHungerAlert = 0; // Таймер, чтобы бот не спамил в чат каждую секунду
+// Питание
+let lastHungerAlert = 0; // Таймер, для предотвращения спама
 bot.isEating = false;
 
 bot.on('health', async () => {
-    if (bot.isEating) return; // Если уже едим - не спамим
+    if (bot.isEating) return; // Проверка на действие
 
-    // Критическое условие: здоровье меньше 12 (6 сердец) ИЛИ голод меньше 16
+    // Условие для питания: здоровье меньше 12 ИЛИ голод меньше 16
     const needsFood = bot.health < 12 || bot.food < 16;
     
     if (needsFood) {
         const food = bot.inventory.items().find(item => 
-            ['enchanted_golden_apple', 'golden_apple', 'cooked_beef', 'cooked_porkchop', 'bread'].includes(item.name)
+            ['enchanted_golden_apple', 'golden_apple', 'cooked_beef', 'cooked_porkchop', 'bread', 'cooked_chicken',  
+                'cooked_mutton', 'cooked_rabbit', 'cooked_salmon', 'cooked_cod', 'baked_potato', 'dried_kelp'
+            ].includes(item.name)
         );
 
         if (food) {
             bot.isEating = true;
             
-            // 1. ЖЕСТКО ОСТАНАВЛИВАЕМ ВСЕ ДРУГИЕ ПРОЦЕССЫ
-            if (bot.pvp.target) bot.pvp.stop(); // Прерываем бой
-            if (bot.collectBlock?.targets?.length > 0) bot.collectBlock.cancelTask(); // Прерываем копку
-            bot.pathfinder.setGoal(null); // Останавливаем бег
+            // Остановка всех процессов - питание в главном приоритете
+            if (bot.pvp.target) bot.pvp.stop(); // Бой
+            if (bot.collectBlock?.targets?.length > 0) bot.collectBlock.cancelTask(); // Добыча
+            bot.pathfinder.setGoal(null); // Бег
 
             console.log(`[Питание] Срочный перекус! Здоровье: ${Math.round(bot.health)}. Ем: ${food.name}`);
             
@@ -137,15 +137,14 @@ bot.on('health', async () => {
 
             bot.isEating = false;
 
-            // --- ВОССТАНОВЛЕНИЕ ДИНАМИЧЕСКИХ ЗАДАЧ ---
-            // Проверяем, что намерение не изменилось (игрок не крикнул "Стой!" во время еды)
+            // Восстановление задач
             if ((bot.currentIntent === 'follow' || bot.currentIntent === 'defend') && bot.followingTarget) {
                 const goals = require('mineflayer-pathfinder').goals;
                 bot.pathfinder.setGoal(new goals.GoalFollow(bot.followingTarget, 2), true);
                 console.log(`[Питание] Возвращаюсь к динамической задаче: ${bot.currentIntent}`);
             }
         } else {
-            // 2. ЕДЫ НЕТ - ЖАЛУЕМСЯ ИГРОКУ (максимум раз в 30 секунд)
+            // Уведомление при отсутствии еды
             if (Date.now() - lastHungerAlert > 30000) {
                 bot.chat("У меня кончилась еда, и я очень голоден! Скинь мне что-нибудь поесть или прикажи поохотиться.");
                 console.log(`[Питание] Внимание: критический уровень голода, а еды в инвентаре нет!`);
@@ -155,10 +154,8 @@ bot.on('health', async () => {
     }
 });
 
-// -----------------------------------------------------------
-
-// --- РЕАКТИВНЫЙ УРОВЕНЬ: Умная броня ---
-bot.autoArmorEnabled = true; // Флаг, чтобы бот не надевал броню, если мы приказали её снять
+// Автоматическая система экипировки брони
+bot.autoArmorEnabled = true; // Флаг, чтобы бот не надевал броню, если приказано снять
 
 function getArmorScore(name) {
     if (!name) return 0;
@@ -182,20 +179,20 @@ async function equipBestArmor() {
     };
 
     for (const [piece, data] of Object.entries(armorTypes)) {
-        // Ищем все предметы этого типа брони в инвентаре
+        // Происк
         const available = bot.inventory.items().filter(i => i.name.includes(piece));
         if (available.length === 0) continue;
 
-        // Сортируем от лучшего к худшему
+        // Сортировка от лучшего к худшему
         available.sort((a, b) => getArmorScore(b.name) - getArmorScore(a.name));
         const best = available[0];
         
-        // Смотрим, что надето на боте прямо сейчас
+        // Осмотр текущей экипированной брони
         const currentEquipped = bot.entity.equipment[data.equipIndex];
         const currentScore = currentEquipped ? getArmorScore(currentEquipped.name) : 0;
         const bestScore = getArmorScore(best.name);
 
-        // Если в рюкзаке лежит что-то круче, чем надето на теле — переодеваемся!
+        // Надевание лучшей брони, при наличии таковой в инвентаре
         if (bestScore > currentScore) {
             bot.isEquipping = true;
             try {
@@ -207,10 +204,8 @@ async function equipBestArmor() {
     }
 }
 
-// Проверяем броню каждые 3 секунды (не нагружает сервер)
+// Проверка брони, по умолчанию - раз в 3 секунды
 setInterval(equipBestArmor, 3000);
-
-// -----------------------------------------------------------
 
 // Полная остановка всех действий
 function stopAllActivities(bot) {
@@ -243,7 +238,6 @@ async function goToSleep(bot) {
     }
 
     try {
-        // Используем goals.GoalNear из вашего импорта
         await bot.pathfinder.goto(new goals.GoalNear(bed.position.x, bed.position.y, bed.position.z, 1));
         await bot.sleep(bed);
         bot.chat("Спокойной ночи! zZz");
@@ -252,23 +246,21 @@ async function goToSleep(bot) {
     }
 }
 
-// -----------------------------------------------------------
-
-// Слушаем сообщения в чате
+// Слуние сообщений в чате
 bot.on('chat', async (username, message) => {
-    // Игнорируем собственные сообщения бота, чтобы избежать зацикливания
+    // Игнорирование собственных сообщений бота, во избежание зацикливания.
     if (username === bot.username) return;
 
     console.log(`[Чат] ${username}: ${message}`);
 
-    // 1. Сохраняем реплику игрока
+    // Сохранение реплики игрока
     chatHistory.push(`Игрок ${username}: ${message}`);
     if (chatHistory.length > MAX_HISTORY) chatHistory.shift();
 
     // Динамическое состояние
     const state = getAgentState(bot, username, message, chatHistory.join('\n'));
 
-    // Отправляем запрос на Python-сервер
+    // Отправление запроса на Python-сервер
     console.log('⏳ Ожидаю решение от LLM...');
     const decision = await askBrain(state);
 
@@ -282,7 +274,7 @@ bot.on('chat', async (username, message) => {
         bot.currentIntent = decision.intent; 
         bot.targetPlayer = username; 
 
-        // 2. Тактический уровень: Маршрутизация намерений
+        // Маршрутизация намерений
         switch (decision.intent) {
             case 'give':
                 console.log(`>>> Передача ${actionCount} шт. ${decision.target}`);

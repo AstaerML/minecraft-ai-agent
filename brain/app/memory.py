@@ -4,14 +4,14 @@ import os
 from chromadb.utils import embedding_functions
 import time
 
-# Создаем папку chroma_data прямо в директории brain для сохранения памяти на диск
+# Создание папки chroma_data прямо в директории brain для сохранения памяти на диск
 chroma_client = chromadb.PersistentClient(path="./chroma_data")
 
-# Загружаем мультиязычную модель для векторизации (скачается автоматически при первом запуске)
+# Загрузка мультиязычной модели для векторизации (скачается автоматически при первом запуске)
 EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL", "intfloat/multilingual-e5-small")
 ef = embedding_functions.SentenceTransformerEmbeddingFunction(model_name=EMBEDDING_MODEL_NAME)
 
-# Создаем или подключаемся к коллекции (таблице)
+# Создание или подключение к коллекции (таблице)
 collection = chroma_client.get_or_create_collection(name="minecraft_memory", embedding_function=ef)
 
 def save_memory(text: str):
@@ -23,12 +23,9 @@ def save_memory(text: str):
     )
     print(f"[Память] Сохранено: {text}")
 
-# Проверка работоспособности:
-# save_memory("Сундук с железом и алмазами находится на координатах X: 100, Y: 64, Z: 50.")
-
 def search_memory(query: str, n_results: int = 2) -> str:
     """Ищет релевантные факты по запросу пользователя"""
-    # Если база пустая, поиск выдаст ошибку, поэтому проверяем количество записей
+    # Проверка количества записей, во избежание выхода ошибки
     if collection.count() == 0:
         return ""
         

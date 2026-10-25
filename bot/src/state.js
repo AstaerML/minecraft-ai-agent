@@ -1,5 +1,5 @@
 function getAgentState(bot, username, message, chatHistoryString = "") {
-    // Собираем реальный инвентарь (ключ - имя предмета, значение - количество)
+    // Сбор значений инвентаря (ключ - имя предмета, значение - количество)
     const inventory = {};
     bot.inventory.items().forEach(item => {
         if (inventory[item.name]) {
@@ -9,10 +9,10 @@ function getAgentState(bot, username, message, chatHistoryString = "") {
         }
     });
 
-    // Ищем ближайших сущностей (мобов/игроков) в радиусе 16 блоков
+    // Поиск ближайших сущностей (мобов/игроков), по умолчанию - в радиусе 16 блоков
     const entities = Object.values(bot.entities)
         .filter(entity => entity.type === 'mob' || entity.type === 'player')
-        .filter(entity => entity !== bot.entity) // Исключаем самого бота
+        .filter(entity => entity !== bot.entity) // Исключение самого бота
         .filter(entity => bot.entity.position.distanceTo(entity.position) < 16)
         .map(entity => entity.name || entity.username);
 

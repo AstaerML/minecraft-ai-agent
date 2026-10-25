@@ -6,8 +6,6 @@ from app.memory import clear_memory
 
 app = FastAPI(title="Minecraft AI Brain")
 
-#  E:\minecraft-ai-agent\brain>uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload Запуск (должно быть включено окружение!)
-
 @app.post("/decide", response_model=AgentAction)
 async def decide_action(state: AgentState):
     """

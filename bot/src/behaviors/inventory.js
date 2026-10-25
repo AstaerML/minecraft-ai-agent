@@ -1,4 +1,4 @@
-// Импортированные ф-ции:
+// Импорт плагинов
 const { goals, Movements } = require('mineflayer-pathfinder');
 
 // Ф-ции:
@@ -10,21 +10,20 @@ async function giveItem(bot, targetPlayerName, itemTarget, count = 1) {
         return;
     }
 
-    // --- НОВАЯ ПРОВЕРКА ДИСТАНЦИИ (в 3D-пространстве) ---
+    // Проверка дистанции до игрока
     const distance = bot.entity.position.distanceTo(player.position);
     console.log(`[Дистанция] До игрока ${targetPlayerName}: ${distance.toFixed(2)} блоков`);
     
     if (distance > 30) {
-        bot.chat("Не могу найти путь к тебе :("); // Выдаем сообщение, если игрок слишком далеко
+        bot.chat("Не могу найти путь к тебе :(");
         return;
     }
 
-    // --- БЛОК НАВИГАЦИИ ---
-    // Настраиваем физику движений (может ли бот прыгать, строить мосты и т.д.)
+    // Настройка физики движения
     const defaultMove = new Movements(bot);
     bot.pathfinder.setMovements(defaultMove);
     
-    // Задаем цель: подойти к игроку на расстояние 2 блоков
+    // Инициализация цели: подойти к игроку на расстояние 2 блоков
     const goal = new goals.GoalNear(player.position.x, player.position.y, player.position.z, 2);
     bot.chat("Бегу к тебе!");
     
@@ -40,19 +39,18 @@ async function giveItem(bot, targetPlayerName, itemTarget, count = 1) {
 
     const searchTarget = itemTarget ? itemTarget.toLowerCase() : '';
     
-    // Используем filter вместо find, чтобы получить ВСЕ слоты с этим предметом
+    // Получение всех слотов с предметом
     const matchingItems = bot.inventory.items().filter(item => item.name.includes(searchTarget));
 
     if (matchingItems.length > 0) {
         let remainingToDrop = count; // Сколько еще осталось выкинуть
-        let totalDropped = 0;        // Сколько уже выкинули
+        let totalDropped = 0;        // Сколько уже выкинуто
 
         for (const item of matchingItems) {
-            // Если выкинули нужное количество — останавливаем цикл
+            // Если выкинуто нужное количество — цикл останавливается
             if (remainingToDrop <= 0) break;
 
-            // Считаем, сколько можем выкинуть ИЗ ЭТОГО СЛОТА
-            // (либо остаток запроса, либо всё содержимое слота, если остаток больше)
+            // Расчёт количества требуемого/доступного для выбрасывания из 1-го слота
             const dropAmount = Math.min(remainingToDrop, item.count);
             
             try {

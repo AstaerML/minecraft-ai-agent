@@ -15,5 +15,5 @@ class AgentState(BaseModel):
 class AgentAction(BaseModel):
     intent: str
     target: Optional[str] = None
-    count: int    # Строго обязательное поле (без = 1)
+    count: int    
     message: str

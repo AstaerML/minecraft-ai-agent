@@ -6,30 +6,29 @@ async function gatherItem(bot, targetName, count = 1) {
     bot.chat(`Начинаю добычу: ${targetName}. Нужно собрать: ${count === 999 ? 'максимум' : count} шт.`);
     
     let searchName = targetName.toLowerCase();
-    // Убираем жесткую привязку oak, чтобы бот мог копать birch_log, spruce_log и т.д.
     if (searchName === 'wood') searchName = 'log'; 
     if (searchName === 'stone') searchName = 'stone';
 
     let collected = 0;
     
-    // ФИЗИКа ДВИЖЕНИЙ ДЛЯ АЛГОРИТМА ПОИСКА ПУТИ
+    // Настройка физики движений
     const defaultMove = new Movements(bot);
-    defaultMove.allowParkour = true; // Запрещаем сложные прыжки по диагонали
-    defaultMove.maxDropDown = 3;      // Запрещаем прыгать в глубокие шахты (максимум 3 блоков)
-    defaultMove.canDig = true;        // Разрешаем ломать мешающие блоки на пути
+    defaultMove.allowParkour = true;  // Прыжки по диагонали
+    defaultMove.maxDropDown = 3;      // Максимальная глубина для поиска
+    defaultMove.canDig = true;        // Возможность ломать мешающие блоки на пути
     bot.pathfinder.setMovements(defaultMove);
     
     // Цикл добычи
     while (collected < count) {
-        // ПРЕДОХРАНИТЕЛЬ 1: Выход, если задача изменилась между итерациями
+        // Проверка на завершение задачи
         if (bot.currentIntent !== 'gather') {
             console.log('[Добыча] Задача отменена перед поиском нового блока.');
             return;
         };
-        // Ищем новый блок на каждой итерации (т.к. предыдущий уже сломан)
+        // Поиск блока на новой итерации
         const targetBlock = bot.findBlock({
             matching: (block) => block.name.includes(searchName),
-            maxDistance: 24
+            maxDistance: 24 // Максимальная дистанция поиска, значение по умолчанию - 24
         });
         
         if (!targetBlock) {
@@ -37,11 +36,10 @@ async function gatherItem(bot, targetName, count = 1) {
             return;
         }
 
-        // --- ИСПРАВЛЕННЫЙ ПРЕДОХРАНИТЕЛЬ ОТ КРАША ПАМЯТИ ---
-        // 1. Проверяем, может ли бот добыть блок тем, что сейчас в руках (или голой рукой, если передаем null)
+        // Проверка, может ли бот добыть блок
         let canHarvest = targetBlock.canHarvest(bot.heldItem ? bot.heldItem.type : null);
 
-        // 2. Если в руках не то, ищем подходящий инструмент в инвентаре
+        // Поиск подходящего инструмента в инвентаре
         if (!canHarvest) {
             for (const item of bot.inventory.items()) {
                 if (targetBlock.canHarvest(item.type)) {
@@ -51,16 +49,15 @@ async function gatherItem(bot, targetName, count = 1) {
             }
         }
 
-        // 3. Если ни в руках, ни в инвентаре нет нужной кирки — отказываемся
+        // Отказ при отсутствии инструмента
         if (!canHarvest) {
             console.log(`[Добыча] Отмена: нет инструмента для ${targetBlock.name}`);
             bot.chat(`У меня нет подходящего инструмента, чтобы добыть ${targetBlock.name}!`);
-            return; // Прерываем функцию до того, как pathfinder сойдет с ума
+            return;
         }
 
-        // ------------------------------------
 
-        // Ищем профильный инструмент по ключевым словам
+        // Поиск профильного инструмента по ключевым словам
         const isDirt = ['dirt', 'grass', 'sand', 'gravel'].some(k => targetBlock.name.includes(k));
         const isWood = ['wood', 'log', 'planks'].some(k => targetBlock.name.includes(k));
         const isRock = ['stone', 'ore', 'deepslate', 'netherrack', 'cobblestone'].some(k => targetBlock.name.includes(k));
@@ -77,83 +74,76 @@ async function gatherItem(bot, targetName, count = 1) {
             );
         }
 
-        // Если инструмент найден и он еще не в руках — экипируем его
+        // Экипировка инструмента
         if (bestTool && (!bot.heldItem || bot.heldItem.type !== bestTool.type)) {
             try {
                 await bot.equip(bestTool, 'hand');
                 console.log(`[Добыча] Взял в руки инструмент: ${bestTool.name}`);
             } catch (err) {}
         }
-            
-        // ------------------------------------
 
 
         if (!targetBlock) {
             bot.chat(`Больше не вижу ${searchName} поблизости. Смог добыть только: ${collected} шт.`);
             return;
         }
-        // ПРЕДОХРАНИТЕЛЬ 2: Выход, если задача изменилась во время смены инструмента
+        // Завершение добычи, при смене задачи
         if (bot.currentIntent !== 'gather') {
             console.log('[Добыча] Задача отменена перед началом раскопки.');
             return;
         }
 
         try {
-            // Добываем блок
+            // Добыча блока
             await bot.collectBlock.collect(targetBlock);
             collected++;
             console.log(`[Добыча] Собрано: ${collected}/${count === 999 ? '∞' : count}`);
         } catch (err) {
-            // Если игрок скомандовал "стой", "иди сюда" или дал другую задачу — навсегда выходим
+            // Проверка на актуальность задания
             if (bot.currentIntent !== 'gather') {
                 console.log('[Добыча] Полная отмена задачи.');
                 return; 
             }
-            // Если прерывание инициировано нами (бой, еда или ручная отмена)
+            // Прерывание в случае начала боя
             if (err.message === 'Task cancelled' || (bot.pvp && bot.pvp.target)) {
                 
-                // 1. Ожидание окончания боя
+                // Ожидание окончания боя
                 if (bot.pvp && bot.pvp.target) {
                     bot.chat("Отвлекся на монстра! Приостанавливаю работу...");
                     while (true) {
-                        // Спим, пока деремся с текущей целью
                         while (bot.pvp && bot.pvp.target) {
                             await new Promise(resolve => setTimeout(resolve, 1000));
                         }
 
-                        // Враг мертв. Даем радару 1 секунду на захват следующего врага из толпы
+                        // Время для захвата новой цели
                         await new Promise(resolve => setTimeout(resolve, 1000));
 
-                        // Проверяем, появился ли новый враг
+                        // Проверяем на наличие врага
                         if (bot.pvp && bot.pvp.target) {
                             console.log("[Защита] Цепочка боев: обнаружена новая цель!");
-                            // Идем на новый круг while (true), чтобы добить новую цель
                         } else {
-                            // За 1 секунду никого не нашли. Бой точно окончен!
                             break;
                         }
                     }
 
-                    // Сообщаем в чат только один раз в самом конце
+                    // Сообщение о окончании боя
                     bot.chat("Территория зачищена. Возвращаюсь к добыче!");
                     continue;
                 } 
-                // 2. Ожидание окончания перекуса
+                // Ожидание окончания перекуса
                 else if (bot.isEating) {
                     console.log("[Добыча] Ожидаю окончания перекуса...");
                     while (bot.isEating) {
                         await new Promise(resolve => setTimeout(resolve, 500));
                     }
                 } else {
-                    // Базовая пауза для непредвиденных отмен
+                    // Пауза для непредвиденных отмен
                     await new Promise(resolve => setTimeout(resolve, 1000));
                 }
-
-                // Инструкция continue запустит цикл заново
                 continue; 
             }
             
-            // Если это настоящая ошибка движка (невозможно проложить путь и т.д.)
+            // Проверка на ошибку
             console.error("[Mining Error]:", err.message);
             bot.chat(`Не могу добраться до блока. Останавливаюсь. Итого собрал: ${collected} шт.`);
             return;

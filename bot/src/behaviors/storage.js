@@ -3,10 +3,10 @@ const { goals, Movements } = require('mineflayer-pathfinder');
 async function storeItems(bot) {
     bot.chat("Ищу сундук поблизости...");
 
-    // Ищем сундук в радиусе 32 блоков
+    // Поиск сундука в заданном радиусе
     const chestBlock = bot.findBlock({
         matching: (block) => block.name === 'chest' || block.name === 'trapped_chest',
-        maxDistance: 32
+        maxDistance: 32 // Максимальная дистанция для обнаружения сундука, значение по умолчанию - 32
     });
 
     if (!chestBlock) {
@@ -22,20 +22,20 @@ async function storeItems(bot) {
         await bot.pathfinder.goto(goal);
         bot.chat("Сундук найден! Начинаю разгрузку...");
         
-        // Открываем сундук
+        // Открытие сундука
         const chest = await bot.openContainer(chestBlock);
         let depositedCount = 0;
 
-        // Перебираем инвентарь бота
+        // Перебор инвентаря бота
         for (const item of bot.inventory.items()) {
-            // НЕ выкладываем оружие, инструменты и еду (хлеб, стейки)
+            // Предметы, которые бот не будет выкладывать (инструменты, еда)
             const isTool = item.name.includes('sword') || item.name.includes('pickaxe') || item.name.includes('axe') || item.name.includes('shovel');
             const isFood = item.name.includes('bread') || item.name.includes('beef') || item.name.includes('porkchop') || item.name.includes('apple');
             
             if (isTool || isFood) continue;
 
+            // Выкладывание предметов
             try {
-                // Пытаемся положить весь стак этого предмета в сундук
                 await chest.deposit(item.type, null, item.count);
                 depositedCount++;
             } catch (err) {
@@ -43,7 +43,7 @@ async function storeItems(bot) {
             }
         }
 
-        // Обязательно закрываем сундук после работы
+        // Закрытие сундука
         await chest.close();
         
         if (depositedCount > 0) {

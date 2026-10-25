@@ -9,19 +9,17 @@ async function followPlayer(bot, targetPlayerName) {
         return;
     }
 
-    // Настраиваем физику (разрешаем прыгать, избегать лавы и т.д.)
+    // Настройка физики (разрешаем прыгать, избегать лавы и т.д.)
     const defaultMove = new Movements(bot);
     bot.pathfinder.setMovements(defaultMove);
 
     bot.followingTarget = target; // Сохранение в глобальную память
 
-    // Создаем цель: следовать за объектом target, держа дистанцию в 2 блока
+    // Создание цели: следовать за объектом target, держа дистанцию в 2 блока
     const goal = new goals.GoalFollow(target, 2);
 
     bot.chat(`Понял, иду за тобой, ${targetPlayerName}!`);
 
-    // ВАЖНО: Вместо await bot.pathfinder.goto(goal), мы используем setGoal с флагом true.
-    // Флаг 'true' делает цель динамической — бот будет преследовать игрока бесконечно.
     bot.pathfinder.setGoal(goal, true);
 }
 

@@ -16,7 +16,7 @@ env_path = os.path.join(BASE_DIR, '.env')
 load_dotenv(dotenv_path=env_path)
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
 
-# Базовый системный промпт для классификации намерений
+# Системный промпт
 SYSTEM_PROMPT = """Ты ИИ-напарник в Minecraft. Выдавай ТОЛЬКО валидный JSON.
 
 INTENTS: chat, gather, follow, defend, give, stop, store, hunt, equip, unequip, remember, forget, sleep.
@@ -49,7 +49,7 @@ INTENTS: chat, gather, follow, defend, give, stop, store, hunt, equip, unequip, 
 - "Забудь про деревню": {"intent": "forget", "target": null, "count": 1, "message": "Удалил информацию о деревне из памяти."}
 """
 
-# Жесткая структура, которую мы навяжем модели
+# Схема
 OLLAMA_SCHEMA = {
     "type": "object",
     "properties": {
@@ -62,20 +62,20 @@ OLLAMA_SCHEMA = {
 }
 
 async def get_agent_action(state: AgentState) -> AgentAction:
-    # 1. Ищем похожие воспоминания на основе того, что сказал игрок
+    # Поиск воспоминаний на основе того, что сказал игрок
     context = search_memory(state.player_message)
     
-    # 2. Если что-то нашлось, красиво оформляем это для модели
+    # Оформление для модели, в случае нахождения
     memory_string = f"\n[Справка из памяти: {context}]" if context else ""
     
-    # 3. Добавляем память в промпт
+    # Добавление память в промпт
     user_prompt = f"История диалога:\n{state.chat_history}\n\nИгрок {state.player_name} говорит: '{state.player_message}'. Здоровье: {state.health}. Инвентарь: {state.inventory}. Твои текущие координаты: {state.position}. {memory_string}"
     
     payload = {
         "model": os.getenv("LLM_MODEL","llama3.1:8b"),
         "prompt": user_prompt,
         "system": SYSTEM_PROMPT,
-        "format": OLLAMA_SCHEMA, # Магия: передаем схему вместо строки "json"
+        "format": OLLAMA_SCHEMA, 
         "stream": False
     }
 
@@ -85,16 +85,16 @@ async def get_agent_action(state: AgentState) -> AgentAction:
         
     result_dict = json.loads(data["response"])
 
-    # --- СОХРАНЕНИЕ В БАЗУ ДАННЫХ ---
+    # Сохранение в базу данных
     if result_dict.get("intent") == "remember":
-        # Сохраняем исходную фразу игрока, чтобы не терять точность координат при пересказе LLM
+        # Сохранение исходной фразы игрока, чтобы не терять точность координат при пересказе LLM
         fact = f"Игрок {state.player_name} попросил запомнить: {state.player_message}"
         save_memory(fact)
     elif result_dict.get("intent") == "forget":
         delete_memory(state.player_message)
     # --------------------------------
     
-    # Страховка: если целевой предмет отсутствует, ставим None
+    # Страховка: если целевой предмет отсутствует -> None
     if "target" not in result_dict:
         result_dict["target"] = None
         
